@@ -137,6 +137,7 @@ public class CppGenerator implements CodeGenerator
                 generateFields(sb, className, fields, BASE_INDENT, false);
                 generateGroups(sb, groups, BASE_INDENT);
                 generateVarData(sb, className, varData, BASE_INDENT);
+                generateMsgClearFunc(sb, className, fields, BASE_INDENT);
                 generateDisplay(sb, msgToken.name(), fields, groups, varData, BASE_INDENT + INDENT);
                 sb.append("};\n");
                 sb.append(CppUtil.closingBraces(ir.namespaces().length)).append("#endif\n");
@@ -914,8 +915,10 @@ public class CppGenerator implements CodeGenerator
         new Formatter(sb).format(
             "            case %1$s: return NULL_VALUE;\n" +
             "        }\n\n" +
-
-            "        throw std::runtime_error(\"unknown value for enum %2$s [E103]\");\n" +
+            "#ifndef TEST_SBE_LIBRARY\n" +
+            "        TTLOG(WARNING, 0) << \"unknown value for enum %1$s [E103]\";\n" +
+            "#endif\n" +
+            "        return NULL_VALUE;\n" +
             "    }\n",
             encodingToken.encoding().applicableNullValue().toString(),
             enumName);
@@ -1163,7 +1166,7 @@ public class CppGenerator implements CodeGenerator
 
             i += tokens.get(i).componentTokenCount();
         }
-
+        generateCompositeClearFunc(sb, containingClassName, tokens, indent);
         return sb;
     }
 
@@ -1950,6 +1953,13 @@ public class CppGenerator implements CodeGenerator
             "        return m_offset;\n" +
             "    }\n\n" +
 
+            "    void SerializeMessageToString(std::string& str) const\n" +
+            "    {\n" +
+            "        std::stringstream ss;\n" +
+            "        ss << *this;\n" +
+            "        str = ss.str();\n" +
+            "    }\n\n" +
+
             "    %10$s &wrapForEncode(char *buffer, const std::uint64_t offset, const std::uint64_t bufferLength)\n" +
             "    {\n" +
             "        return *this = %10$s(buffer, offset, bufferLength, sbeBlockLength(), sbeSchemaVersion());\n" +
@@ -2078,6 +2088,98 @@ public class CppGenerator implements CodeGenerator
                         generateCompositeProperty(sb, propertyName, encodingToken, indent);
                         break;
                 }
+            }
+        }
+    }
+
+    private void generateMsgClearFunc(
+        final StringBuilder sb,
+        final String containingClassName,
+        final List<Token> tokens,
+        final String indent)
+    {
+        new Formatter(sb).format("\n" +
+            "    void Clear()\n" +
+            "    {\n");
+        for (int i = 0, size = tokens.size(); i < size; i++)
+        {
+            final Token signalToken = tokens.get(i);
+            if (signalToken.signal() == Signal.BEGIN_FIELD)
+            {
+                final Token encodingToken = tokens.get(i + 1);
+                appendClearFunc(sb, containingClassName, signalToken, encodingToken, indent);
+            }
+        }
+        new Formatter(sb).format(indent + "    }\n");
+    }
+
+    private void generateCompositeClearFunc(
+        final StringBuilder sb,
+        final String containingClassName,
+        final List<Token> tokens,
+        final String indent)
+    {
+        new Formatter(sb).format("\n" +
+            "    void Clear()\n" +
+            "    {\n");
+        for (int i = 0; i < tokens.size();)
+        {
+            final Token fieldToken = tokens.get(i);
+            appendClearFunc(sb, containingClassName, fieldToken, fieldToken, indent);
+            i += tokens.get(i).componentTokenCount();
+        }
+        new Formatter(sb).format(indent + "    }\n");
+    }
+
+    private void appendClearFunc(
+        final StringBuilder sb,
+        final String containingClassName,
+        final Token propertyToken,
+        final Token encodingToken,
+        final String indent)
+    {
+        final String propertyName = formatPropertyName(propertyToken.name());
+        switch (encodingToken.signal())
+        {
+            case ENCODING:
+            {
+                final Encoding encoding = encodingToken.encoding();
+                final PrimitiveType primitiveType = encoding.primitiveType();
+                final CharSequence nullValueString = generateNullValueLiteral(primitiveType, encoding);
+                if (!encodingToken.isConstantEncoding() && encodingToken.arrayLength() == 1)
+                {
+                    new Formatter(sb).format(
+                    indent + "        %1$s(%2$s);\n",
+                    propertyName,
+                    nullValueString);
+                }
+                break;
+            }
+
+            case BEGIN_ENUM:
+            {
+                final String enumName = formatClassName(encodingToken.applicableTypeName());
+                final CharSequence nullValueString = "NULL_VALUE";
+                if (!propertyToken.isConstantEncoding())
+                {
+                    new Formatter(sb).format(
+                    indent + "        %1$s(%2$s::Value::%3$s);\n",
+                    propertyName,
+                    enumName,
+                    nullValueString);
+                }
+                break;
+            }
+
+            case BEGIN_SET:
+                break;
+
+            case BEGIN_COMPOSITE:
+            {
+                new Formatter(sb).format(
+                    indent + "        %1$s().Clear();\n",
+                    propertyName);
+                break;
             }
         }
     }
@@ -2734,7 +2836,10 @@ public class CppGenerator implements CodeGenerator
         new Formatter(sb).format(
             "            case NULL_VALUE: return \"NULL_VALUE\";\n" +
             "        }\n\n" +
-            "        throw std::runtime_error(\"unknown value for enum %1$s [E103]:\");\n" +
+            "#ifndef TEST_SBE_LIBRARY\n" +
+            "        TTLOG(WARNING, 0) << \"unknown value for enum %1$s [E103]\";\n" +
+            "#endif\n" +
+            "        return \"NULL_VALUE\";\n" +
             "    }\n\n" +
 
             "    template<typename CharT, typename Traits>\n" +
