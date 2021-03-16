@@ -916,10 +916,7 @@ public class CppGenerator implements CodeGenerator
         new Formatter(sb).format(
             "            case %1$s: return NULL_VALUE;\n" +
             "        }\n\n" +
-            "#ifndef TEST_SBE_LIBRARY\n" +
-            "        TTLOG(WARNING, 0) << \"unknown value for enum %1$s [E103]\";\n" +
-            "#endif\n" +
-            "        return NULL_VALUE;\n" +
+            "        throw std::runtime_error(\"%2$s::get() - unknown value for enum %2$s [E103]\");\n" +
             "    }\n",
             encodingToken.encoding().applicableNullValue().toString(),
             enumName);
@@ -2846,10 +2843,7 @@ public class CppGenerator implements CodeGenerator
         new Formatter(sb).format(
             "            case NULL_VALUE: return \"NULL_VALUE\";\n" +
             "        }\n\n" +
-            "#ifndef TEST_SBE_LIBRARY\n" +
-            "        TTLOG(WARNING, 0) << \"unknown value for enum %1$s [E103]\";\n" +
-            "#endif\n" +
-            "        return \"NULL_VALUE\";\n" +
+            "        throw std::runtime_error(\"%1$s::c_str() - unknown value for enum %1$s [E103]:\");\n" +
             "    }\n\n" +
 
             "    template<typename CharT, typename Traits>\n" +
