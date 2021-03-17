@@ -89,8 +89,6 @@ endif ()
 
 find_package(Threads)
 
-add_definitions(-DTEST_SBE_LIBRARY)
-
 if (UNIX)
     add_compile_options(-Wall -Wpedantic -Wextra -Wno-unused-parameter)
 endif ()
